@@ -4,11 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DocClassifier Pro - AI Document Classification</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .gradient-bg {
@@ -26,169 +21,307 @@
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
         }
-        .animate-pulse {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
         }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .5; }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
+        .hidden { display: none; }
+        .block { display: block; }
+        .flex { display: flex; }
+        .grid { display: grid; }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="app-loading" class="min-h-screen gradient-bg flex items-center justify-center">
+        <div class="text-center text-white">
+            <div class="spinner mx-auto mb-4"></div>
+            <p>Đang tải ứng dụng...</p>
+        </div>
+    </div>
+    
+    <div id="app-error" class="hidden min-h-screen gradient-bg flex items-center justify-center">
+        <div class="text-center text-white max-w-md">
+            <h2 class="text-2xl font-bold mb-4">Lỗi tải ứng dụng</h2>
+            <p class="mb-4">Không thể tải ứng dụng. Vui lòng thử lại hoặc kiểm tra kết nối mạng.</p>
+            <button onclick="location.reload()" class="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100">
+                Tải lại trang
+            </button>
+        </div>
+    </div>
 
-    <script type="text/babel">
-        const { useState, useRef, useCallback, useEffect } = React;
-        const { FileText, Upload, Download, Loader2, CheckCircle, AlertCircle, Trash2, BarChart3, Eye, Building2, Users, FileSpreadsheet, Settings, Key } = lucide;
+    <div id="root" class="hidden"></div>
 
-        const DocClassifierWeb = () => {
-            const [files, setFiles] = useState([]);
-            const [customers, setCustomers] = useState({});
-            const [isProcessing, setIsProcessing] = useState(false);
-            const [currentFile, setCurrentFile] = useState('');
-            const [progress, setProgress] = useState(0);
-            const [showDetails, setShowDetails] = useState({});
-            const [apiKey, setApiKey] = useState(localStorage.getItem('claude-api-key') || '');
-            const [showApiInput, setShowApiInput] = useState(!apiKey);
-            const [processingStats, setProcessingStats] = useState({ processed: 0, total: 0 });
-            const fileInputRef = useRef(null);
+    <!-- Load React and dependencies with error handling -->
+    <script>
+        // Global error handler
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('Global error:', msg, url, lineNo);
+            showError();
+            return false;
+        };
 
-            const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-            const MAX_TOTAL_SIZE = 1.5 * 1024 * 1024 * 1024; // 1.5GB
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            showError();
+        });
 
-            const CATEGORIES = [
-                'Hồ sơ pháp lý',
-                'Hồ sơ tài chính', 
-                'Đăng ký kinh doanh',
-                'Căn cước công dân',
-                'Giấy phép lái xe',
-                'Hợp đồng',
-                'Hóa đơn',
-                'Báo cáo tài chính',
-                'Nghị quyết',
-                'Quyết định',
-                'Biên bản',
-                'Giấy chứng nhận',
-                'Khác'
-            ];
+        function showError() {
+            document.getElementById('app-loading').classList.add('hidden');
+            document.getElementById('app-error').classList.remove('hidden');
+            document.getElementById('root').classList.add('hidden');
+        }
 
-            useEffect(() => {
-                if (apiKey) {
-                    localStorage.setItem('claude-api-key', apiKey);
+        function showApp() {
+            document.getElementById('app-loading').classList.add('hidden');
+            document.getElementById('app-error').classList.add('hidden');
+            document.getElementById('root').classList.remove('hidden');
+        }
+
+        // Load scripts with timeout and error handling
+        function loadScript(src, callback) {
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            
+            let loaded = false;
+            const timeout = setTimeout(() => {
+                if (!loaded) {
+                    console.error('Script timeout:', src);
+                    showError();
                 }
-            }, [apiKey]);
+            }, 10000);
 
-            const handleFileUpload = useCallback((event) => {
-                const selectedFiles = Array.from(event.target.files);
-                const pdfFiles = selectedFiles.filter(file => file.type === 'application/pdf');
-                
-                if (pdfFiles.length !== selectedFiles.length) {
-                    alert(`⚠️ Chỉ chấp nhận file PDF. Đã loại bỏ ${selectedFiles.length - pdfFiles.length} file không phù hợp.`);
-                }
-                
-                if (pdfFiles.length === 0) {
-                    alert('❌ Không có file PDF nào được chọn.');
-                    return;
-                }
+            script.onload = () => {
+                loaded = true;
+                clearTimeout(timeout);
+                callback();
+            };
+            
+            script.onerror = () => {
+                loaded = true;
+                clearTimeout(timeout);
+                console.error('Script failed to load:', src);
+                showError();
+            };
+            
+            document.head.appendChild(script);
+        }
 
-                // Check individual file size
-                const oversizedFiles = pdfFiles.filter(file => file.size > MAX_FILE_SIZE);
-                if (oversizedFiles.length > 0) {
-                    alert(`❌ File quá lớn (>50MB): ${oversizedFiles.map(f => f.name).join(', ')}`);
-                    return;
-                }
-
-                // Check total size
-                const currentTotal = files.reduce((sum, file) => sum + file.size, 0);
-                const newTotal = currentTotal + pdfFiles.reduce((sum, file) => sum + file.size, 0);
-                
-                if (newTotal > MAX_TOTAL_SIZE) {
-                    const currentMB = Math.round(currentTotal / 1024 / 1024);
-                    const newMB = Math.round(newTotal / 1024 / 1024);
-                    alert(`❌ Vượt quá giới hạn 1.5GB!\nHiện tại: ${currentMB}MB\nSau khi thêm: ${newMB}MB`);
-                    return;
-                }
-                
-                const uniqueFiles = pdfFiles.filter(newFile => 
-                    !files.some(existingFile => 
-                        existingFile.name === newFile.name && existingFile.size === newFile.size
-                    )
-                );
-
-                if (uniqueFiles.length !== pdfFiles.length) {
-                    alert(`ℹ️ Đã loại bỏ ${pdfFiles.length - uniqueFiles.length} file trùng lặp.`);
-                }
-                
-                setFiles(prevFiles => [...prevFiles, ...uniqueFiles]);
-            }, [files]);
-
-            const removeFile = useCallback((index) => {
-                setFiles(files.filter((_, i) => i !== index));
-                // Remove from results if exists
-                setCustomers(prev => {
-                    const newCustomers = { ...prev };
-                    Object.keys(newCustomers).forEach(customerName => {
-                        newCustomers[customerName].documents = newCustomers[customerName].documents.filter(doc => doc.fileIndex !== index);
-                        if (newCustomers[customerName].documents.length === 0) {
-                            delete newCustomers[customerName];
-                        }
+        // Load dependencies in sequence
+        loadScript('https://unpkg.com/react@18/umd/react.production.min.js', () => {
+            loadScript('https://unpkg.com/react-dom@18/umd/react-dom.production.min.js', () => {
+                loadScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', () => {
+                    loadScript('https://unpkg.com/lucide@latest/dist/umd/lucide.js', () => {
+                        initializeApp();
                     });
-                    return newCustomers;
                 });
-            }, [files]);
+            });
+        });
 
-            const convertFileToBase64 = useCallback((file) => {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        try {
-                            const base64 = reader.result.split(',')[1];
-                            resolve(base64);
-                        } catch (error) {
-                            reject(new Error('Không thể đọc file'));
-                        }
-                    };
-                    reader.onerror = () => reject(new Error('Lỗi đọc file'));
-                    reader.readAsDataURL(file);
-                });
-            }, []);
-
-            const analyzeWithClaude = useCallback(async (base64Data, fileName, fileIndex) => {
-                if (!apiKey.trim()) {
-                    throw new Error('Chưa cung cấp API key');
+        function initializeApp() {
+            try {
+                // Check if all required globals are available
+                if (typeof React === 'undefined' || typeof ReactDOM === 'undefined' || typeof XLSX === 'undefined') {
+                    throw new Error('Required libraries not loaded');
                 }
 
-                const maxRetries = 2;
-                let lastError = null;
+                const { useState, useRef, useCallback, useEffect, createElement: e } = React;
+                const { createRoot } = ReactDOM;
 
-                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                // Get lucide icons safely
+                const getIcon = (name) => {
                     try {
-                        const response = await fetch("https://api.anthropic.com/v1/messages", {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "x-api-key": apiKey,
-                                "anthropic-version": "2023-06-01"
-                            },
-                            body: JSON.stringify({
-                                model: "claude-sonnet-4-20250514",
-                                max_tokens: 3000,
-                                messages: [
-                                    {
-                                        role: "user",
-                                        content: [
+                        return lucide[name] || (() => e('div', { className: 'w-6 h-6 bg-gray-300 rounded' }));
+                    } catch (err) {
+                        return () => e('div', { className: 'w-6 h-6 bg-gray-300 rounded' });
+                    }
+                };
+
+                const FileText = getIcon('FileText');
+                const Upload = getIcon('Upload');
+                const Download = getIcon('Download');
+                const Loader2 = getIcon('Loader2');
+                const CheckCircle = getIcon('CheckCircle');
+                const AlertCircle = getIcon('AlertCircle');
+                const Trash2 = getIcon('Trash2');
+                const BarChart3 = getIcon('BarChart3');
+                const Eye = getIcon('Eye');
+                const Building2 = getIcon('Building2');
+                const FileSpreadsheet = getIcon('FileSpreadsheet');
+                const Settings = getIcon('Settings');
+                const Key = getIcon('Key');
+
+                const CATEGORIES = [
+                    'Hồ sơ pháp lý',
+                    'Hồ sơ tài chính', 
+                    'Đăng ký kinh doanh',
+                    'Căn cước công dân',
+                    'Giấy phép lái xe',
+                    'Hợp đồng',
+                    'Hóa đơn',
+                    'Báo cáo tài chính',
+                    'Nghị quyết',
+                    'Quyết định',
+                    'Biên bản',
+                    'Giấy chứng nhận',
+                    'Khác'
+                ];
+
+                function DocClassifierWeb() {
+                    const [files, setFiles] = useState([]);
+                    const [customers, setCustomers] = useState({});
+                    const [isProcessing, setIsProcessing] = useState(false);
+                    const [currentFile, setCurrentFile] = useState('');
+                    const [progress, setProgress] = useState(0);
+                    const [showDetails, setShowDetails] = useState({});
+                    const [apiKey, setApiKey] = useState('');
+                    const [showApiInput, setShowApiInput] = useState(true);
+                    const [processingStats, setProcessingStats] = useState({ processed: 0, total: 0 });
+                    const fileInputRef = useRef(null);
+
+                    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+                    const MAX_TOTAL_SIZE = 1.5 * 1024 * 1024 * 1024;
+
+                    useEffect(() => {
+                        try {
+                            const savedKey = localStorage.getItem('claude-api-key');
+                            if (savedKey) {
+                                setApiKey(savedKey);
+                                setShowApiInput(false);
+                            }
+                        } catch (err) {
+                            console.warn('LocalStorage not available');
+                        }
+                    }, []);
+
+                    const handleFileUpload = useCallback((event) => {
+                        try {
+                            const selectedFiles = Array.from(event.target.files);
+                            const pdfFiles = selectedFiles.filter(file => file.type === 'application/pdf');
+                            
+                            if (pdfFiles.length !== selectedFiles.length) {
+                                alert(`Chỉ chấp nhận file PDF. Đã loại bỏ ${selectedFiles.length - pdfFiles.length} file không phù hợp.`);
+                            }
+                            
+                            if (pdfFiles.length === 0) {
+                                alert('Không có file PDF nào được chọn.');
+                                return;
+                            }
+
+                            const oversizedFiles = pdfFiles.filter(file => file.size > MAX_FILE_SIZE);
+                            if (oversizedFiles.length > 0) {
+                                alert(`File quá lớn (>50MB): ${oversizedFiles.map(f => f.name).join(', ')}`);
+                                return;
+                            }
+
+                            const currentTotal = files.reduce((sum, file) => sum + file.size, 0);
+                            const newTotal = currentTotal + pdfFiles.reduce((sum, file) => sum + file.size, 0);
+                            
+                            if (newTotal > MAX_TOTAL_SIZE) {
+                                const currentMB = Math.round(currentTotal / 1024 / 1024);
+                                const newMB = Math.round(newTotal / 1024 / 1024);
+                                alert(`Vượt quá giới hạn 1.5GB!\nHiện tại: ${currentMB}MB\nSau khi thêm: ${newMB}MB`);
+                                return;
+                            }
+                            
+                            const uniqueFiles = pdfFiles.filter(newFile => 
+                                !files.some(existingFile => 
+                                    existingFile.name === newFile.name && existingFile.size === newFile.size
+                                )
+                            );
+
+                            if (uniqueFiles.length !== pdfFiles.length) {
+                                alert(`Đã loại bỏ ${pdfFiles.length - uniqueFiles.length} file trùng lặp.`);
+                            }
+                            
+                            setFiles(prevFiles => [...prevFiles, ...uniqueFiles]);
+                        } catch (err) {
+                            console.error('File upload error:', err);
+                            alert('Lỗi khi tải file. Vui lòng thử lại.');
+                        }
+                    }, [files]);
+
+                    const removeFile = useCallback((index) => {
+                        try {
+                            setFiles(files.filter((_, i) => i !== index));
+                            setCustomers(prev => {
+                                const newCustomers = { ...prev };
+                                Object.keys(newCustomers).forEach(customerName => {
+                                    newCustomers[customerName].documents = newCustomers[customerName].documents.filter(doc => doc.fileIndex !== index);
+                                    if (newCustomers[customerName].documents.length === 0) {
+                                        delete newCustomers[customerName];
+                                    }
+                                });
+                                return newCustomers;
+                            });
+                        } catch (err) {
+                            console.error('Remove file error:', err);
+                        }
+                    }, [files]);
+
+                    const convertFileToBase64 = useCallback((file) => {
+                        return new Promise((resolve, reject) => {
+                            try {
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                    try {
+                                        const base64 = reader.result.split(',')[1];
+                                        resolve(base64);
+                                    } catch (error) {
+                                        reject(new Error('Không thể đọc file'));
+                                    }
+                                };
+                                reader.onerror = () => reject(new Error('Lỗi đọc file'));
+                                reader.readAsDataURL(file);
+                            } catch (err) {
+                                reject(new Error('Lỗi xử lý file'));
+                            }
+                        });
+                    }, []);
+
+                    const analyzeWithClaude = useCallback(async (base64Data, fileName, fileIndex) => {
+                        if (!apiKey.trim()) {
+                            throw new Error('Chưa cung cấp API key');
+                        }
+
+                        const maxRetries = 2;
+                        let lastError = null;
+
+                        for (let attempt = 0; attempt < maxRetries; attempt++) {
+                            try {
+                                const response = await fetch("https://api.anthropic.com/v1/messages", {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        "x-api-key": apiKey,
+                                        "anthropic-version": "2023-06-01"
+                                    },
+                                    body: JSON.stringify({
+                                        model: "claude-sonnet-4-20250514",
+                                        max_tokens: 3000,
+                                        messages: [
                                             {
-                                                type: "document",
-                                                source: {
-                                                    type: "base64",
-                                                    media_type: "application/pdf",
-                                                    data: base64Data,
-                                                },
-                                            },
-                                            {
-                                                type: "text",
-                                                text: `Phân tích file PDF này và trả về JSON với format chính xác:
+                                                role: "user",
+                                                content: [
+                                                    {
+                                                        type: "document",
+                                                        source: {
+                                                            type: "base64",
+                                                            media_type: "application/pdf",
+                                                            data: base64Data,
+                                                        },
+                                                    },
+                                                    {
+                                                        type: "text",
+                                                        text: `Phân tích file PDF này và trả về JSON với format chính xác:
 
 {
   "company_name": "tên công ty/tổ chức chính xác từ tài liệu",
@@ -218,837 +351,734 @@ QUY TẮC QUAN TRỌNG:
 - document_title phải mô tả chính xác loại tài liệu này
 - Nếu không tìm thấy thông tin, để giá trị rỗng ""
 - confidence từ 0.0 đến 1.0`
+                                                    },
+                                                ],
                                             },
-                                        ],
+                                        ]
+                                    })
+                                });
+
+                                if (!response.ok) {
+                                    throw new Error(`API Error: ${response.status}`);
+                                }
+
+                                const data = await response.json();
+                                
+                                if (!data.content || !data.content[0] || !data.content[0].text) {
+                                    throw new Error('Invalid API response structure');
+                                }
+
+                                let responseText = data.content[0].text.trim();
+                                responseText = responseText
+                                    .replace(/```json\s*/g, '')
+                                    .replace(/```\s*/g, '')
+                                    .replace(/^[^{]*/, '')
+                                    .replace(/[^}]*$/, '')
+                                    .trim();
+
+                                const parsedResult = JSON.parse(responseText);
+
+                                return {
+                                    fileName,
+                                    fileIndex,
+                                    fileSize: 0,
+                                    company_name: (parsedResult.company_name || "Không xác định").toString().trim(),
+                                    company_id: (parsedResult.company_id || "").toString().trim(),
+                                    document_category: parsedResult.document_category || "Khác",
+                                    document_title: (parsedResult.document_title || fileName).toString().trim(),
+                                    document_number: (parsedResult.document_number || "").toString().trim(),
+                                    issue_date: (parsedResult.issue_date || "").toString().trim(),
+                                    extracted_info: {
+                                        representative_name: (parsedResult.extracted_info?.representative_name || "").toString().trim(),
+                                        representative_id: (parsedResult.extracted_info?.representative_id || "").toString().trim(),
+                                        business_license: (parsedResult.extracted_info?.business_license || "").toString().trim(),
+                                        tax_code: (parsedResult.extracted_info?.tax_code || "").toString().trim(),
+                                        address: (parsedResult.extracted_info?.address || "").toString().trim(),
+                                        phone: (parsedResult.extracted_info?.phone || "").toString().trim(),
+                                        email: (parsedResult.extracted_info?.email || "").toString().trim(),
+                                        other_info: (parsedResult.extracted_info?.other_info || "").toString().trim()
                                     },
-                                ]
-                            })
-                        });
+                                    confidence: Math.max(0, Math.min(1, parsedResult.confidence || 0.5)),
+                                    key_fields: Array.isArray(parsedResult.key_fields) ? parsedResult.key_fields : [],
+                                    status: 'success',
+                                    processedAt: new Date().toLocaleString('vi-VN')
+                                };
 
-                        if (!response.ok) {
-                            const errorText = await response.text();
-                            throw new Error(`API Error: ${response.status} - ${errorText}`);
+                            } catch (error) {
+                                lastError = error;
+                                console.error(`Attempt ${attempt + 1} failed for ${fileName}:`, error.message);
+                                
+                                if (attempt < maxRetries - 1) {
+                                    await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+                                }
+                            }
                         }
 
-                        const data = await response.json();
-                        
-                        if (!data.content || !data.content[0] || !data.content[0].text) {
-                            throw new Error('Invalid API response structure');
-                        }
-
-                        let responseText = data.content[0].text.trim();
-                        
-                        // Clean response - remove all markdown formatting
-                        responseText = responseText
-                            .replace(/```json\s*/g, '')
-                            .replace(/```\s*/g, '')
-                            .replace(/^[^{]*/, '')
-                            .replace(/[^}]*$/, '')
-                            .trim();
-
-                        const parsedResult = JSON.parse(responseText);
-
-                        // Sanitize and validate result
-                        const sanitizedResult = {
+                        return {
                             fileName,
                             fileIndex,
-                            fileSize: 0, // Will be set by caller
-                            company_name: (parsedResult.company_name || "Không xác định").toString().trim(),
-                            company_id: (parsedResult.company_id || "").toString().trim(),
-                            document_category: parsedResult.document_category || "Khác",
-                            document_title: (parsedResult.document_title || fileName).toString().trim(),
-                            document_number: (parsedResult.document_number || "").toString().trim(),
-                            issue_date: (parsedResult.issue_date || "").toString().trim(),
+                            fileSize: 0,
+                            company_name: "Lỗi phân tích", 
+                            company_id: "",
+                            document_category: "Lỗi xử lý",
+                            document_title: fileName,
+                            document_number: "",
+                            issue_date: "",
                             extracted_info: {
-                                representative_name: (parsedResult.extracted_info?.representative_name || "").toString().trim(),
-                                representative_id: (parsedResult.extracted_info?.representative_id || "").toString().trim(),
-                                business_license: (parsedResult.extracted_info?.business_license || "").toString().trim(),
-                                tax_code: (parsedResult.extracted_info?.tax_code || "").toString().trim(),
-                                address: (parsedResult.extracted_info?.address || "").toString().trim(),
-                                phone: (parsedResult.extracted_info?.phone || "").toString().trim(),
-                                email: (parsedResult.extracted_info?.email || "").toString().trim(),
-                                other_info: (parsedResult.extracted_info?.other_info || "").toString().trim()
+                                representative_name: "", representative_id: "", business_license: "",
+                                tax_code: "", address: "", phone: "", email: "",
+                                other_info: lastError?.message || "Không thể phân tích file"
                             },
-                            confidence: Math.max(0, Math.min(1, parsedResult.confidence || 0.5)),
-                            key_fields: Array.isArray(parsedResult.key_fields) ? parsedResult.key_fields : [],
-                            status: 'success',
+                            confidence: 0.0,
+                            key_fields: [],
+                            status: 'error',
                             processedAt: new Date().toLocaleString('vi-VN')
                         };
+                    }, [apiKey, CATEGORIES]);
 
-                        // Handle null values
-                        Object.keys(sanitizedResult.extracted_info).forEach(key => {
-                            if (sanitizedResult.extracted_info[key] === null || sanitizedResult.extracted_info[key] === "null") {
-                                sanitizedResult.extracted_info[key] = "";
-                            }
-                        });
-
-                        return sanitizedResult;
-
-                    } catch (error) {
-                        lastError = error;
-                        console.error(`Attempt ${attempt + 1} failed for ${fileName}:`, error.message);
-                        
-                        if (attempt < maxRetries - 1) {
-                            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-                        }
-                    }
-                }
-
-                // All attempts failed
-                return {
-                    fileName,
-                    fileIndex,
-                    fileSize: 0,
-                    company_name: "Lỗi phân tích", 
-                    company_id: "",
-                    document_category: "Lỗi xử lý",
-                    document_title: fileName,
-                    document_number: "",
-                    issue_date: "",
-                    extracted_info: {
-                        representative_name: "",
-                        representative_id: "",
-                        business_license: "",
-                        tax_code: "",
-                        address: "",
-                        phone: "",
-                        email: "",
-                        other_info: lastError?.message || "Không thể phân tích file"
-                    },
-                    confidence: 0.0,
-                    key_fields: [],
-                    status: 'error',
-                    processedAt: new Date().toLocaleString('vi-VN')
-                };
-            }, [apiKey, CATEGORIES]);
-
-            const processFiles = useCallback(async () => {
-                if (files.length === 0) {
-                    alert('⚠️ Vui lòng chọn ít nhất 1 file PDF');
-                    return;
-                }
-
-                if (!apiKey.trim()) {
-                    alert('⚠️ Vui lòng cung cấp Claude API key');
-                    setShowApiInput(true);
-                    return;
-                }
-
-                const confirmProcess = window.confirm(
-                    `🚀 Bắt đầu xử lý ${files.length} file PDF?\n\nQuá trình này có thể mất 1-2 giờ tùy thuộc vào số lượng và kích thước file.`
-                );
-
-                if (!confirmProcess) return;
-
-                setIsProcessing(true);
-                setCustomers({});
-                setProgress(0);
-                setProcessingStats({ processed: 0, total: files.length });
-
-                const tempCustomers = {};
-
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    setCurrentFile(file.name);
-                    setProgress(Math.round(((i + 0.5) / files.length) * 100));
-                    setProcessingStats({ processed: i, total: files.length });
-
-                    try {
-                        const base64Data = await convertFileToBase64(file);
-                        const analysis = await analyzeWithClaude(base64Data, file.name, i);
-                        analysis.fileSize = file.size;
-                        
-                        // Group by company
-                        const companyKey = analysis.company_name || "Không xác định";
-                        if (!tempCustomers[companyKey]) {
-                            tempCustomers[companyKey] = {
-                                companyInfo: {
-                                    name: analysis.company_name,
-                                    id: analysis.company_id,
-                                    representative: analysis.extracted_info.representative_name,
-                                    representativeId: analysis.extracted_info.representative_id,
-                                    businessLicense: analysis.extracted_info.business_license,
-                                    taxCode: analysis.extracted_info.tax_code,
-                                    address: analysis.extracted_info.address,
-                                    phone: analysis.extracted_info.phone,
-                                    email: analysis.extracted_info.email
-                                },
-                                documents: [],
-                                stats: {
-                                    totalFiles: 0,
-                                    successFiles: 0,
-                                    errorFiles: 0,
-                                    avgConfidence: 0
-                                }
-                            };
+                    const processFiles = useCallback(async () => {
+                        if (files.length === 0) {
+                            alert('Vui lòng chọn ít nhất 1 file PDF');
+                            return;
                         }
 
-                        tempCustomers[companyKey].documents.push(analysis);
-                        
-                    } catch (error) {
-                        console.error(`Error processing ${file.name}:`, error);
-                        
-                        const errorCompany = "Lỗi xử lý";
-                        if (!tempCustomers[errorCompany]) {
-                            tempCustomers[errorCompany] = {
-                                companyInfo: { name: errorCompany },
-                                documents: [],
-                                stats: { totalFiles: 0, successFiles: 0, errorFiles: 0, avgConfidence: 0 }
-                            };
+                        if (!apiKey.trim()) {
+                            alert('Vui lòng cung cấp Claude API key');
+                            setShowApiInput(true);
+                            return;
                         }
 
-                        tempCustomers[errorCompany].documents.push({
-                            fileName: file.name,
-                            fileIndex: i,
-                            fileSize: file.size,
-                            company_name: errorCompany,
-                            document_title: file.name,
-                            status: 'error',
-                            confidence: 0.0,
-                            processedAt: new Date().toLocaleString('vi-VN'),
-                            extracted_info: { other_info: error.message }
-                        });
-                    }
-                    
-                    setProgress(Math.round(((i + 1) / files.length) * 100));
-                    setProcessingStats({ processed: i + 1, total: files.length });
-                    setCustomers({ ...tempCustomers });
-                }
+                        const confirmProcess = window.confirm(
+                            `Bắt đầu xử lý ${files.length} file PDF?\n\nQuá trình này có thể mất 1-2 giờ tùy thuộc vào số lượng và kích thước file.`
+                        );
 
-                // Calculate stats for each customer
-                Object.keys(tempCustomers).forEach(companyKey => {
-                    const customer = tempCustomers[companyKey];
-                    const docs = customer.documents;
-                    customer.stats = {
-                        totalFiles: docs.length,
-                        successFiles: docs.filter(d => d.status === 'success').length,
-                        errorFiles: docs.filter(d => d.status === 'error').length,
-                        avgConfidence: docs.length > 0 ? 
-                            Math.round(docs.reduce((sum, d) => sum + (d.confidence || 0), 0) / docs.length * 100) : 0
-                    };
-                });
+                        if (!confirmProcess) return;
 
-                setIsProcessing(false);
-                setCurrentFile('');
-                setProgress(100);
-                setProcessingStats({ processed: files.length, total: files.length });
-                
-                const totalSuccess = Object.values(tempCustomers).reduce((sum, customer) => sum + customer.stats.successFiles, 0);
-                alert(`✅ Hoàn thành!\nĐã xử lý ${totalSuccess}/${files.length} file thành công\nTìm thấy ${Object.keys(tempCustomers).length} khách hàng`);
-            }, [files, convertFileToBase64, analyzeWithClaude, apiKey]);
+                        try {
+                            setIsProcessing(true);
+                            setCustomers({});
+                            setProgress(0);
+                            setProcessingStats({ processed: 0, total: files.length });
 
-            const exportToExcel = useCallback(() => {
-                if (Object.keys(customers).length === 0) {
-                    alert('⚠️ Không có dữ liệu để xuất');
-                    return;
-                }
+                            const tempCustomers = {};
 
-                try {
-                    const wb = XLSX.utils.book_new();
+                            for (let i = 0; i < files.length; i++) {
+                                const file = files[i];
+                                setCurrentFile(file.name);
+                                setProgress(Math.round(((i + 0.5) / files.length) * 100));
+                                setProcessingStats({ processed: i, total: files.length });
 
-                    // Summary sheet
-                    const summaryData = [
-                        ['BÁO CÁO TỔNG HỢP PHÂN LOẠI TÀI LIỆU'],
-                        ['Thời gian tạo:', new Date().toLocaleString('vi-VN')],
-                        [''],
-                        ['THỐNG KÊ TỔNG QUAN'],
-                        ['Tổng số khách hàng', Object.keys(customers).length],
-                        ['Tổng số file xử lý', files.length],
-                        ['File thành công', Object.values(customers).reduce((sum, c) => sum + c.stats.successFiles, 0)],
-                        ['File lỗi', Object.values(customers).reduce((sum, c) => sum + c.stats.errorFiles, 0)],
-                        ['Tổng dung lượng (MB)', Math.round(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024)],
-                        [''],
-                        ['DANH SÁCH KHÁCH HÀNG'],
-                        ['STT', 'Tên công ty', 'Mã số thuế', 'Số file', 'File thành công', 'Độ tin cậy TB']
-                    ];
-
-                    Object.entries(customers).forEach(([companyName, data], index) => {
-                        summaryData.push([
-                            index + 1,
-                            companyName,
-                            data.companyInfo.taxCode || data.companyInfo.id || '',
-                            data.stats.totalFiles,
-                            data.stats.successFiles,
-                            `${data.stats.avgConfidence}%`
-                        ]);
-                    });
-
-                    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-                    summarySheet['!cols'] = [
-                        { wch: 5 }, { wch: 40 }, { wch: 15 }, { wch: 10 }, { wch: 12 }, { wch: 12 }
-                    ];
-                    XLSX.utils.book_append_sheet(wb, summarySheet, 'Tổng quan');
-
-                    // Create sheet for each customer
-                    Object.entries(customers).forEach(([companyName, customerData]) => {
-                        const company = customerData.companyInfo;
-                        const docs = customerData.documents;
-                        
-                        // Customer sheet structure (similar to template file)
-                        const sheetData = [
-                            ['DANH MỤC HỒ SƠ'],
-                            [`(Khách hàng: ${companyName})`],
-                            [`Tên Khách hàng: ${company.name}`, '', '', '', 'Mã số thuế', company.taxCode || company.id || ''],
-                            [`Người đại diện: ${company.representative}`, '', '', '', 'CCCD', company.representativeId || ''],
-                            [`Địa chỉ: ${company.address}`],
-                            [`Điện thoại: ${company.phone || ''} | Email: ${company.email || ''}`],
-                            [''],
-                            ['THỐNG KÊ HỒ SƠ'],
-                            [`Tổng số file: ${docs.length}`],
-                            [`File thành công: ${customerData.stats.successFiles}`],
-                            [`Độ tin cậy trung bình: ${customerData.stats.avgConfidence}%`],
-                            [''],
-                            ['STT', 'TÊN TÀI LIỆU', 'LOẠI', 'SỐ/MÃ TÀI LIỆU', 'NGÀY BAN HÀNH', 'ĐỘ TIN CẬY', 'TRẠNG THÁI', 'GHI CHÚ']
-                        ];
-
-                        docs.forEach((doc, index) => {
-                            sheetData.push([
-                                index + 1,
-                                doc.document_title,
-                                doc.document_category,
-                                doc.document_number || '',
-                                doc.issue_date || '',
-                                `${Math.round((doc.confidence || 0) * 100)}%`,
-                                doc.status === 'success' ? 'Thành công' : 'Lỗi',
-                                doc.extracted_info?.other_info || ''
-                            ]);
-                        });
-
-                        const customerSheet = XLSX.utils.aoa_to_sheet(sheetData);
-                        customerSheet['!cols'] = [
-                            { wch: 5 },   // STT
-                            { wch: 50 },  // Tên tài liệu
-                            { wch: 20 },  // Loại
-                            { wch: 20 },  // Số/mã
-                            { wch: 15 },  // Ngày
-                            { wch: 10 },  // Độ tin cậy
-                            { wch: 12 },  // Trạng thái
-                            { wch: 30 }   // Ghi chú
-                        ];
-
-                        // Clean sheet name for Excel
-                        const sheetName = companyName.length > 31 ? companyName.substring(0, 28) + '...' : companyName;
-                        XLSX.utils.book_append_sheet(wb, customerSheet, sheetName);
-                    });
-
-                    // Export file
-                    const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
-                    const customerCount = Object.keys(customers).length;
-                    const fileName = `DocClassifier_Report_${timestamp}_${customerCount}KH_${files.length}files.xlsx`;
-                    XLSX.writeFile(wb, fileName);
-                    
-                    alert(`✅ Đã xuất báo cáo: ${fileName}\n\n📊 ${customerCount} khách hàng\n📄 ${files.length} tài liệu`);
-                } catch (error) {
-                    console.error('Export error:', error);
-                    alert(`❌ Lỗi xuất Excel: ${error.message}`);
-                }
-            }, [customers, files]);
-
-            const clearAll = useCallback(() => {
-                const confirmClear = window.confirm('🗑️ Xóa tất cả file và kết quả?');
-                if (confirmClear) {
-                    setFiles([]);
-                    setCustomers({});
-                    setShowDetails({});
-                    setProgress(0);
-                    setProcessingStats({ processed: 0, total: 0 });
-                    if (fileInputRef.current) {
-                        fileInputRef.current.value = '';
-                    }
-                }
-            }, []);
-
-            const toggleDetails = useCallback((customerName) => {
-                setShowDetails(prev => ({
-                    ...prev,
-                    [customerName]: !prev[customerName]
-                }));
-            }, []);
-
-            const saveApiKey = useCallback(() => {
-                if (apiKey.trim()) {
-                    localStorage.setItem('claude-api-key', apiKey);
-                    setShowApiInput(false);
-                    alert('✅ Đã lưu API key');
-                } else {
-                    alert('⚠️ Vui lòng nhập API key hợp lệ');
-                }
-            }, [apiKey]);
-
-            // Calculate overall stats
-            const totalFiles = files.length;
-            const totalCustomers = Object.keys(customers).length;
-            const totalSuccessFiles = Object.values(customers).reduce((sum, c) => sum + c.stats.successFiles, 0);
-            const totalErrorFiles = Object.values(customers).reduce((sum, c) => sum + c.stats.errorFiles, 0);
-            const totalSizeMB = Math.round(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024);
-
-            return (
-                <div className="min-h-screen gradient-bg p-4">
-                    <div className="max-w-7xl mx-auto">
-                        {/* Header */}
-                        <div className="text-center mb-8">
-                            <div className="flex items-center justify-center gap-4 mb-6">
-                                <div className="bg-white p-4 rounded-2xl shadow-lg">
-                                    <FileText className="h-12 w-12 text-blue-600" />
-                                </div>
-                                <div className="text-white">
-                                    <h1 className="text-5xl font-bold mb-2">DocClassifier Pro</h1>
-                                    <div className="flex items-center justify-center gap-2">
-                                        <div className="h-1 w-12 bg-white/80 rounded"></div>
-                                        <div className="h-1 w-6 bg-white/60 rounded"></div>
-                                        <div className="h-1 w-3 bg-white/40 rounded"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <p className="text-white/90 text-xl max-w-3xl mx-auto font-light">
-                                Hệ thống AI phân loại và trích xuất thông tin tài liệu PDF theo khách hàng với độ chính xác cao
-                            </p>
-                        </div>
-
-                        {/* API Key Input */}
-                        {showApiInput && (
-                            <div className="glass-card rounded-2xl shadow-xl p-6 mb-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <Key className="h-6 w-6 text-blue-600" />
-                                    <h3 className="text-xl font-semibold text-gray-800">Cấu hình API Key</h3>
-                                </div>
-                                <div className="flex gap-3">
-                                    <input
-                                        type="password"
-                                        value={apiKey}
-                                        onChange={(e) => setApiKey(e.target.value)}
-                                        placeholder="Nhập Claude API key (sk-ant-api...)"
-                                        className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    />
-                                    <button
-                                        onClick={saveApiKey}
-                                        className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                                    >
-                                        Lưu
-                                    </button>
-                                    {apiKey && (
-                                        <button
-                                            onClick={() => setShowApiInput(false)}
-                                            className="bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 transition-colors"
-                                        >
-                                            Ẩn
-                                        </button>
-                                    )}
-                                </div>
-                                <p className="text-sm text-gray-600 mt-2">
-                                    API key được lưu local trong trình duyệt. Lấy key tại: <a href="https://console.anthropic.com/" target="_blank" className="text-blue-600 hover:underline">console.anthropic.com</a>
-                                </p>
-                            </div>
-                        )}
-
-                        {/* Upload Section */}
-                        <div className="glass-card rounded-2xl shadow-xl p-8 mb-6">
-                            <div className="border-2 border-dashed border-blue-300 rounded-xl p-10 text-center hover:border-blue-400 transition-all duration-300 hover:bg-blue-50/30 file-hover">
-                                <div className="bg-blue-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
-                                    <Upload className="h-12 w-12 text-blue-600" />
-                                </div>
-                                <h3 className="text-2xl font-semibold text-gray-800 mb-3">Tải lên file PDF</h3>
-                                <p className="text-gray-600 mb-2">Hỗ trợ tải nhiều file cùng lúc từ nhiều khách hàng khác nhau</p>
-                                <p className="text-sm text-gray-500 mb-6">
-                                    Kích thước: tối đa 50MB/file • Tổng dung lượng: tối đa 1.5GB • Format: PDF
-                                </p>
-                                
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    multiple
-                                    accept=".pdf"
-                                    onChange={handleFileUpload}
-                                    className="hidden"
-                                />
-                                
-                                <div className="flex flex-wrap gap-4 justify-center">
-                                    <button
-                                        onClick={() => fileInputRef.current?.click()}
-                                        disabled={isProcessing}
-                                        className="bg-blue-600 text-white px-10 py-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-3 text-lg font-medium shadow-lg"
-                                    >
-                                        <Upload className="h-6 w-6" />
-                                        Chọn file PDF
-                                    </button>
+                                try {
+                                    const base64Data = await convertFileToBase64(file);
+                                    const analysis = await analyzeWithClaude(base64Data, file.name, i);
+                                    analysis.fileSize = file.size;
                                     
-                                    {files.length > 0 && (
-                                        <button
-                                            onClick={clearAll}
-                                            disabled={isProcessing}
-                                            className="bg-gray-600 text-white px-8 py-4 rounded-xl hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-3 text-lg font-medium shadow-lg"
-                                        >
-                                            <Trash2 className="h-6 w-6" />
-                                            Xóa tất cả
-                                        </button>
-                                    )}
+                                    const companyKey = analysis.company_name || "Không xác định";
+                                    if (!tempCustomers[companyKey]) {
+                                        tempCustomers[companyKey] = {
+                                            companyInfo: {
+                                                name: analysis.company_name,
+                                                id: analysis.company_id,
+                                                representative: analysis.extracted_info.representative_name,
+                                                representativeId: analysis.extracted_info.representative_id,
+                                                businessLicense: analysis.extracted_info.business_license,
+                                                taxCode: analysis.extracted_info.tax_code,
+                                                address: analysis.extracted_info.address,
+                                                phone: analysis.extracted_info.phone,
+                                                email: analysis.extracted_info.email
+                                            },
+                                            documents: [],
+                                            stats: { totalFiles: 0, successFiles: 0, errorFiles: 0, avgConfidence: 0 }
+                                        };
+                                    }
 
-                                    {!showApiInput && apiKey && (
-                                        <button
-                                            onClick={() => setShowApiInput(true)}
-                                            className="bg-gray-500 text-white px-6 py-4 rounded-xl hover:bg-gray-600 transition-colors flex items-center gap-2"
-                                        >
-                                            <Settings className="h-5 w-5" />
-                                            API Key
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
+                                    tempCustomers[companyKey].documents.push(analysis);
+                                    
+                                } catch (error) {
+                                    console.error(`Error processing ${file.name}:`, error);
+                                    
+                                    const errorCompany = "Lỗi xử lý";
+                                    if (!tempCustomers[errorCompany]) {
+                                        tempCustomers[errorCompany] = {
+                                            companyInfo: { name: errorCompany },
+                                            documents: [],
+                                            stats: { totalFiles: 0, successFiles: 0, errorFiles: 0, avgConfidence: 0 }
+                                        };
+                                    }
 
-                            {/* Current Upload Stats */}
-                            {files.length > 0 && (
-                                <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="bg-blue-50 p-4 rounded-xl text-center">
-                                        <div className="text-3xl font-bold text-blue-600 mb-1">{files.length}</div>
-                                        <div className="text-sm text-gray-600">File PDF</div>
-                                    </div>
-                                    <div className="bg-purple-50 p-4 rounded-xl text-center">
-                                        <div className="text-3xl font-bold text-purple-600 mb-1">{totalSizeMB}</div>
-                                        <div className="text-sm text-gray-600">MB</div>
-                                    </div>
-                                    <div className="bg-green-50 p-4 rounded-xl text-center">
-                                        <div className="text-3xl font-bold text-green-600 mb-1">{totalCustomers}</div>
-                                        <div className="text-sm text-gray-600">Khách hàng</div>
-                                    </div>
-                                    <div className="bg-yellow-50 p-4 rounded-xl text-center">
-                                        <div className="text-3xl font-bold text-yellow-600 mb-1">
-                                            {Math.round((totalSizeMB / 1536) * 100)}%
-                                        </div>
-                                        <div className="text-sm text-gray-600">Dung lượng</div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* File List Preview */}
-                            {files.length > 0 && !isProcessing && (
-                                <div className="mt-8">
-                                    <h4 className="text-lg font-semibold text-gray-800 mb-4">
-                                        Danh sách file chờ xử lý ({files.length})
-                                    </h4>
-                                    <div className="grid gap-3 max-h-60 overflow-y-auto">
-                                        {files.slice(0, 20).map((file, index) => (
-                                            <div key={`${file.name}-${index}`} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg hover:bg-gray-100 transition-colors">
-                                                <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                    <div className="bg-red-100 p-2 rounded">
-                                                        <FileText className="h-4 w-4 text-red-600" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="font-medium text-gray-800 truncate text-sm">{file.name}</p>
-                                                        <p className="text-xs text-gray-500">{Math.round(file.size / 1024)} KB</p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => removeFile(index)}
-                                                    className="text-red-500 hover:text-red-700 p-1"
-                                                    title="Xóa file"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                        {files.length > 20 && (
-                                            <div className="text-center text-gray-500 text-sm py-2">
-                                                ... và {files.length - 20} file khác
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Process Button */}
-                            <div className="mt-8 text-center">
-                                <button
-                                    onClick={processFiles}
-                                    disabled={files.length === 0 || isProcessing || !apiKey.trim()}
-                                    className="bg-gradient-to-r from-green-600 to-green-700 text-white px-16 py-6 rounded-2xl hover:from-green-700 hover:to-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center gap-4 mx-auto text-xl font-semibold shadow-2xl"
-                                >
-                                    {isProcessing ? (
-                                        <>
-                                            <Loader2 className="h-8 w-8 animate-spin" />
-                                            Đang phân tích...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <BarChart3 className="h-8 w-8" />
-                                            Bắt đầu phân tích ({files.length} file)
-                                        </>
-                                    )}
-                                </button>
+                                    tempCustomers[errorCompany].documents.push({
+                                        fileName: file.name, fileIndex: i, fileSize: file.size,
+                                        company_name: errorCompany, document_title: file.name,
+                                        status: 'error', confidence: 0.0,
+                                        processedAt: new Date().toLocaleString('vi-VN'),
+                                        extracted_info: { other_info: error.message }
+                                    });
+                                }
                                 
-                                {!apiKey.trim() && (
-                                    <p className="text-red-600 text-sm mt-3 font-medium">
-                                        ⚠️ Cần cung cấp Claude API key để sử dụng
-                                    </p>
-                                )}
-                            </div>
-                        </div>
+                                setProgress(Math.round(((i + 1) / files.length) * 100));
+                                setProcessingStats({ processed: i + 1, total: files.length });
+                                setCustomers({ ...tempCustomers });
+                            }
 
-                        {/* Processing Progress */}
-                        {isProcessing && (
-                            <div className="glass-card rounded-2xl shadow-xl p-6 mb-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
-                                    <h3 className="text-xl font-semibold text-gray-800">Đang xử lý tài liệu</h3>
-                                </div>
+                            Object.keys(tempCustomers).forEach(companyKey => {
+                                const customer = tempCustomers[companyKey];
+                                const docs = customer.documents;
+                                customer.stats = {
+                                    totalFiles: docs.length,
+                                    successFiles: docs.filter(d => d.status === 'success').length,
+                                    errorFiles: docs.filter(d => d.status === 'error').length,
+                                    avgConfidence: docs.length > 0 ? 
+                                        Math.round(docs.reduce((sum, d) => sum + (d.confidence || 0), 0) / docs.length * 100) : 0
+                                };
+                            });
+
+                            setIsProcessing(false);
+                            setCurrentFile('');
+                            setProgress(100);
+                            
+                            const totalSuccess = Object.values(tempCustomers).reduce((sum, customer) => sum + customer.stats.successFiles, 0);
+                            alert(`Hoàn thành!\nĐã xử lý ${totalSuccess}/${files.length} file thành công\nTìm thấy ${Object.keys(tempCustomers).length} khách hàng`);
+                        } catch (err) {
+                            console.error('Processing error:', err);
+                            alert(`Lỗi xử lý: ${err.message}`);
+                            setIsProcessing(false);
+                        }
+                    }, [files, convertFileToBase64, analyzeWithClaude, apiKey]);
+
+                    const exportToExcel = useCallback(() => {
+                        if (Object.keys(customers).length === 0) {
+                            alert('Không có dữ liệu để xuất');
+                            return;
+                        }
+
+                        try {
+                            const wb = XLSX.utils.book_new();
+
+                            // Summary sheet
+                            const summaryData = [
+                                ['BÁO CÁO TỔNG HỢP PHÂN LOẠI TÀI LIỆU'],
+                                ['Thời gian tạo:', new Date().toLocaleString('vi-VN')],
+                                [''],
+                                ['THỐNG KÊ TỔNG QUAN'],
+                                ['Tổng số khách hàng', Object.keys(customers).length],
+                                ['Tổng số file xử lý', files.length],
+                                ['File thành công', Object.values(customers).reduce((sum, c) => sum + c.stats.successFiles, 0)],
+                                ['File lỗi', Object.values(customers).reduce((sum, c) => sum + c.stats.errorFiles, 0)],
+                                ['']
+                            ];
+
+                            const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+                            XLSX.utils.book_append_sheet(wb, summarySheet, 'Tổng quan');
+
+                            Object.entries(customers).forEach(([companyName, customerData]) => {
+                                const company = customerData.companyInfo;
+                                const docs = customerData.documents;
                                 
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between text-sm text-gray-600">
-                                        <span>Tiến trình tổng thể</span>
-                                        <span>{processingStats.processed}/{processingStats.total} file ({progress}%)</span>
-                                    </div>
-                                    <div className="bg-gray-200 rounded-full h-4 overflow-hidden">
-                                        <div 
-                                            className="progress-bar h-full transition-all duration-500 ease-out"
-                                            style={{ width: `${progress}%` }}
-                                        ></div>
-                                    </div>
-                                    {currentFile && (
-                                        <div className="bg-blue-50 p-4 rounded-lg">
-                                            <p className="text-blue-800 font-medium">
-                                                📄 Đang phân tích: <span className="font-bold">{currentFile}</span>
-                                            </p>
-                                            <p className="text-blue-600 text-sm mt-1">
-                                                Ước tính thời gian còn lại: ~{Math.ceil((files.length - processingStats.processed) * 2)} phút
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+                                const sheetData = [
+                                    ['DANH MỤC HỒ SƠ'],
+                                    [`(Khách hàng: ${companyName})`],
+                                    [`Tên Khách hàng: ${company.name}`, '', '', '', 'Mã số thuế', company.taxCode || company.id || ''],
+                                    [`Người đại diện: ${company.representative}`, '', '', '', 'CCCD', company.representativeId || ''],
+                                    [`Địa chỉ: ${company.address}`],
+                                    [`Điện thoại: ${company.phone || ''} | Email: ${company.email || ''}`],
+                                    [''],
+                                    ['STT', 'TÊN TÀI LIỆU', 'LOẠI', 'SỐ/MÃ TÀI LIỆU', 'NGÀY BAN HÀNH', 'ĐỘ TIN CẬY', 'TRẠNG THÁI', 'GHI CHÚ']
+                                ];
 
-                        {/* Results by Customer */}
-                        {Object.keys(customers).length > 0 && (
-                            <div className="glass-card rounded-2xl shadow-xl">
-                                {/* Results Header */}
-                                <div className="p-6 border-b border-gray-100">
-                                    <div className="flex items-center justify-between flex-wrap gap-4">
-                                        <div className="flex items-center gap-4">
-                                            <div className="bg-green-100 p-3 rounded-xl">
-                                                <Building2 className="h-8 w-8 text-green-600" />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-2xl font-bold text-gray-800">Kết quả phân loại theo khách hàng</h3>
-                                                <p className="text-gray-600">
-                                                    {totalCustomers} khách hàng • {totalSuccessFiles} file thành công • {totalErrorFiles} file lỗi
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={exportToExcel}
-                                            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 flex items-center gap-3 text-lg font-medium shadow-lg"
-                                        >
-                                            <FileSpreadsheet className="h-6 w-6" />
-                                            Xuất Excel đa sheet
-                                        </button>
-                                    </div>
-                                </div>
+                                docs.forEach((doc, index) => {
+                                    sheetData.push([
+                                        index + 1,
+                                        doc.document_title,
+                                        doc.document_category,
+                                        doc.document_number || '',
+                                        doc.issue_date || '',
+                                        `${Math.round((doc.confidence || 0) * 100)}%`,
+                                        doc.status === 'success' ? 'Thành công' : 'Lỗi',
+                                        doc.extracted_info?.other_info || ''
+                                    ]);
+                                });
 
-                                {/* Overall Statistics */}
-                                <div className="p-6 border-b border-gray-100">
-                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl text-center">
-                                            <div className="text-3xl font-bold text-blue-600 mb-1">{totalFiles}</div>
-                                            <div className="text-sm text-gray-700">Tổng file</div>
-                                        </div>
-                                        <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl text-center">
-                                            <div className="text-3xl font-bold text-green-600 mb-1">{totalSuccessFiles}</div>
-                                            <div className="text-sm text-gray-700">Thành công</div>
-                                        </div>
-                                        <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-xl text-center">
-                                            <div className="text-3xl font-bold text-red-600 mb-1">{totalErrorFiles}</div>
-                                            <div className="text-sm text-gray-700">Lỗi</div>
-                                        </div>
-                                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl text-center">
-                                            <div className="text-3xl font-bold text-purple-600 mb-1">{totalCustomers}</div>
-                                            <div className="text-sm text-gray-700">Khách hàng</div>
-                                        </div>
-                                        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-xl text-center">
-                                            <div className="text-3xl font-bold text-yellow-600 mb-1">{totalSizeMB}</div>
-                                            <div className="text-sm text-gray-700">MB đã xử lý</div>
-                                        </div>
-                                    </div>
-                                </div>
+                                const customerSheet = XLSX.utils.aoa_to_sheet(sheetData);
+                                const sheetName = companyName.length > 31 ? companyName.substring(0, 28) + '...' : companyName;
+                                XLSX.utils.book_append_sheet(wb, customerSheet, sheetName);
+                            });
 
-                                {/* Customer Results */}
-                                <div className="p-6">
-                                    <div className="space-y-4">
-                                        {Object.entries(customers).map(([customerName, customerData]) => (
-                                            <div key={customerName} className="border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                                                {/* Customer Header */}
-                                                <div 
-                                                    className="bg-gray-50 p-4 cursor-pointer hover:bg-gray-100 transition-colors"
-                                                    onClick={() => toggleDetails(customerName)}
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="bg-blue-600 p-2 rounded-lg">
-                                                                <Building2 className="h-5 w-5 text-white" />
-                                                            </div>
-                                                            <div>
-                                                                <h4 className="text-lg font-bold text-gray-800">{customerName}</h4>
-                                                                <div className="flex items-center gap-4 text-sm text-gray-600">
-                                                                    <span>MST: {customerData.companyInfo.taxCode || customerData.companyInfo.id || 'N/A'}</span>
-                                                                    <span>•</span>
-                                                                    <span>{customerData.stats.totalFiles} tài liệu</span>
-                                                                    <span>•</span>
-                                                                    <span className={customerData.stats.successFiles === customerData.stats.totalFiles ? 'text-green-600 font-medium' : 'text-yellow-600'}>
-                                                                        {customerData.stats.successFiles}/{customerData.stats.totalFiles} thành công
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="text-right">
-                                                                <div className="text-lg font-bold text-gray-800">{customerData.stats.avgConfidence}%</div>
-                                                                <div className="text-xs text-gray-500">Độ tin cậy</div>
-                                                            </div>
-                                                            <Eye className={`h-5 w-5 text-gray-400 transform transition-transform ${showDetails[customerName] ? 'rotate-180' : ''}`} />
-                                                        </div>
-                                                    </div>
-                                                </div>
+                            const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
+                            const customerCount = Object.keys(customers).length;
+                            const fileName = `DocClassifier_Report_${timestamp}_${customerCount}KH_${files.length}files.xlsx`;
+                            XLSX.writeFile(wb, fileName);
+                            
+                            alert(`Đã xuất báo cáo: ${fileName}\n\n${customerCount} khách hàng\n${files.length} tài liệu`);
+                        } catch (error) {
+                            console.error('Export error:', error);
+                            alert(`Lỗi xuất Excel: ${error.message}`);
+                        }
+                    }, [customers, files]);
 
-                                                {/* Customer Details */}
-                                                {showDetails[customerName] && (
-                                                    <div className="p-6 bg-white">
-                                                        {/* Company Info */}
-                                                        <div className="grid md:grid-cols-2 gap-6 mb-6">
-                                                            <div className="bg-blue-50 p-4 rounded-lg">
-                                                                <h5 className="font-semibold text-gray-800 mb-3">Thông tin công ty</h5>
-                                                                <div className="space-y-2 text-sm">
-                                                                    <div><strong>Tên:</strong> {customerData.companyInfo.name}</div>
-                                                                    <div><strong>Mã số thuế:</strong> {customerData.companyInfo.taxCode || 'N/A'}</div>
-                                                                    <div><strong>Người đại diện:</strong> {customerData.companyInfo.representative || 'N/A'}</div>
-                                                                    <div><strong>CCCD đại diện:</strong> {customerData.companyInfo.representativeId || 'N/A'}</div>
-                                                                    <div><strong>Địa chỉ:</strong> {customerData.companyInfo.address || 'N/A'}</div>
-                                                                    <div><strong>Liên hệ:</strong> {customerData.companyInfo.phone || ''} {customerData.companyInfo.email || ''}</div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="bg-green-50 p-4 rounded-lg">
-                                                                <h5 className="font-semibold text-gray-800 mb-3">Thống kê hồ sơ</h5>
-                                                                <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="text-center">
-                                                                        <div className="text-2xl font-bold text-blue-600">{customerData.stats.totalFiles}</div>
-                                                                        <div className="text-xs text-gray-600">Tổng file</div>
-                                                                    </div>
-                                                                    <div className="text-center">
-                                                                        <div className="text-2xl font-bold text-green-600">{customerData.stats.successFiles}</div>
-                                                                        <div className="text-xs text-gray-600">Thành công</div>
-                                                                    </div>
-                                                                    <div className="text-center">
-                                                                        <div className="text-2xl font-bold text-red-600">{customerData.stats.errorFiles}</div>
-                                                                        <div className="text-xs text-gray-600">Lỗi</div>
-                                                                    </div>
-                                                                    <div className="text-center">
-                                                                        <div className="text-2xl font-bold text-yellow-600">{customerData.stats.avgConfidence}%</div>
-                                                                        <div className="text-xs text-gray-600">Tin cậy</div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
+                    const clearAll = useCallback(() => {
+                        const confirmClear = window.confirm('Xóa tất cả file và kết quả?');
+                        if (confirmClear) {
+                            setFiles([]);
+                            setCustomers({});
+                            setShowDetails({});
+                            setProgress(0);
+                            setProcessingStats({ processed: 0, total: 0 });
+                            if (fileInputRef.current) {
+                                fileInputRef.current.value = '';
+                            }
+                        }
+                    }, []);
 
-                                                        {/* Documents Table */}
-                                                        <div className="overflow-x-auto">
-                                                            <h5 className="font-semibold text-gray-800 mb-3">Danh mục tài liệu ({customerData.documents.length})</h5>
-                                                            <table className="w-full text-sm">
-                                                                <thead className="bg-gray-50">
-                                                                    <tr>
-                                                                        <th className="text-left p-3 font-semibold text-gray-700 border-b">STT</th>
-                                                                        <th className="text-left p-3 font-semibold text-gray-700 border-b">Tên tài liệu</th>
-                                                                        <th className="text-left p-3 font-semibold text-gray-700 border-b">Loại</th>
-                                                                        <th className="text-left p-3 font-semibold text-gray-700 border-b">Số/Mã</th>
-                                                                        <th className="text-left p-3 font-semibold text-gray-700 border-b">Ngày</th>
-                                                                        <th className="text-left p-3 font-semibold text-gray-700 border-b">Tin cậy</th>
-                                                                        <th className="text-left p-3 font-semibold text-gray-700 border-b">Trạng thái</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {customerData.documents.map((doc, docIndex) => (
-                                                                        <tr key={docIndex} className="border-b hover:bg-gray-50 transition-colors">
-                                                                            <td className="p-3">{docIndex + 1}</td>
-                                                                            <td className="p-3">
-                                                                                <div className="font-medium text-gray-800 max-w-xs truncate" title={doc.document_title}>
-                                                                                    {doc.document_title}
-                                                                                </div>
-                                                                                <div className="text-xs text-gray-500">{doc.fileName}</div>
-                                                                            </td>
-                                                                            <td className="p-3">
-                                                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                                                    doc.document_category.includes('Lỗi') 
-                                                                                        ? 'bg-red-100 text-red-700' 
-                                                                                        : 'bg-blue-100 text-blue-700'
-                                                                                }`}>
-                                                                                    {doc.document_category}
-                                                                                </span>
-                                                                            </td>
-                                                                            <td className="p-3 text-gray-600">{doc.document_number || '-'}</td>
-                                                                            <td className="p-3 text-gray-600">{doc.issue_date || '-'}</td>
-                                                                            <td className="p-3">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <span className={`text-sm font-medium ${
-                                                                                        doc.confidence > 0.7 ? 'text-green-600' : 
-                                                                                        doc.confidence > 0.4 ? 'text-yellow-600' : 'text-red-600'
-                                                                                    }`}>
-                                                                                        {Math.round(doc.confidence * 100)}%
-                                                                                    </span>
-                                                                                    <div className={`w-8 h-1.5 rounded-full overflow-hidden ${
-                                                                                        doc.confidence > 0.7 ? 'bg-green-100' : 
-                                                                                        doc.confidence > 0.4 ? 'bg-yellow-100' : 'bg-red-100'
-                                                                                    }`}>
-                                                                                        <div 
-                                                                                            className={`h-full transition-all duration-300 ${
-                                                                                                doc.confidence > 0.7 ? 'bg-green-500' : 
-                                                                                                doc.confidence > 0.4 ? 'bg-yellow-500' : 'bg-red-500'
-                                                                                            }`}
-                                                                                            style={{ width: `${doc.confidence * 100}%` }}
-                                                                                        ></div>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </td>
-                                                                            <td className="p-3">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    {doc.status === 'success' ? (
-                                                                                        <CheckCircle className="h-4 w-4 text-green-500" />
-                                                                                    ) : (
-                                                                                        <AlertCircle className="h-4 w-4 text-red-500" />
-                                                                                    )}
-                                                                                    <span className={`text-xs font-medium ${
-                                                                                        doc.status === 'success' ? 'text-green-600' : 'text-red-600'
-                                                                                    }`}>
-                                                                                        {doc.status === 'success' ? 'OK' : 'Lỗi'}
-                                                                                    </span>
-                                                                                </div>
-                                                                            </td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                    const saveApiKey = useCallback(() => {
+                        if (apiKey.trim()) {
+                            try {
+                                localStorage.setItem('claude-api-key', apiKey);
+                                setShowApiInput(false);
+                                alert('Đã lưu API key');
+                            } catch (err) {
+                                console.warn('Cannot save to localStorage');
+                                setShowApiInput(false);
+                            }
+                        } else {
+                            alert('Vui lòng nhập API key hợp lệ');
+                        }
+                    }, [apiKey]);
 
-                        {/* Footer */}
-                        <div className="text-center mt-12 text-white/80">
-                            <div className="flex items-center justify-center gap-2 mb-2">
-                                <FileText className="h-5 w-5" />
-                                <span className="font-semibold">DocClassifier Pro</span>
-                            </div>
-                            <p className="text-sm">
-                                Được phát triển bởi AI Technology • Hỗ trợ: support@docclassifier.pro
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
+                    const toggleDetails = useCallback((customerName) => {
+                        setShowDetails(prev => ({ ...prev, [customerName]: !prev[customerName] }));
+                    }, []);
 
-        ReactDOM.render(<DocClassifierWeb />, document.getElementById('root'));
+                    // Calculate stats
+                    const totalFiles = files.length;
+                    const totalCustomers = Object.keys(customers).length;
+                    const totalSuccessFiles = Object.values(customers).reduce((sum, c) => sum + c.stats.successFiles, 0);
+                    const totalErrorFiles = Object.values(customers).reduce((sum, c) => sum + c.stats.errorFiles, 0);
+                    const totalSizeMB = Math.round(files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024);
+
+                    return e('div', { className: 'min-h-screen gradient-bg p-4' },
+                        e('div', { className: 'max-w-7xl mx-auto' },
+                            // Header
+                            e('div', { className: 'text-center mb-8' },
+                                e('div', { className: 'flex items-center justify-center gap-4 mb-6' },
+                                    e('div', { className: 'bg-white p-4 rounded-2xl shadow-lg' },
+                                        e(FileText, { className: 'h-12 w-12 text-blue-600' })
+                                    ),
+                                    e('div', { className: 'text-white' },
+                                        e('h1', { className: 'text-5xl font-bold mb-2' }, 'DocClassifier Pro'),
+                                        e('div', { className: 'flex items-center justify-center gap-2' },
+                                            e('div', { className: 'h-1 w-12 bg-white/80 rounded' }),
+                                            e('div', { className: 'h-1 w-6 bg-white/60 rounded' }),
+                                            e('div', { className: 'h-1 w-3 bg-white/40 rounded' })
+                                        )
+                                    )
+                                ),
+                                e('p', { className: 'text-white/90 text-xl max-w-3xl mx-auto font-light' },
+                                    'Hệ thống AI phân loại và trích xuất thông tin tài liệu PDF theo khách hàng với độ chính xác cao'
+                                )
+                            ),
+
+                            // API Key Input
+                            showApiInput && e('div', { className: 'glass-card rounded-2xl shadow-xl p-6 mb-6' },
+                                e('div', { className: 'flex items-center gap-3 mb-4' },
+                                    e(Key, { className: 'h-6 w-6 text-blue-600' }),
+                                    e('h3', { className: 'text-xl font-semibold text-gray-800' }, 'Cấu hình API Key')
+                                ),
+                                e('div', { className: 'flex gap-3' },
+                                    e('input', {
+                                        type: 'password',
+                                        value: apiKey,
+                                        onChange: (e) => setApiKey(e.target.value),
+                                        placeholder: 'Nhập Claude API key (sk-ant-api...)',
+                                        className: 'flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500'
+                                    }),
+                                    e('button', {
+                                        onClick: saveApiKey,
+                                        className: 'bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium'
+                                    }, 'Lưu'),
+                                    apiKey && e('button', {
+                                        onClick: () => setShowApiInput(false),
+                                        className: 'bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 transition-colors'
+                                    }, 'Ẩn')
+                                ),
+                                e('p', { className: 'text-sm text-gray-600 mt-2' },
+                                    'API key được lưu local trong trình duyệt. Lấy key tại: ',
+                                    e('a', { 
+                                        href: 'https://console.anthropic.com/', 
+                                        target: '_blank', 
+                                        className: 'text-blue-600 hover:underline' 
+                                    }, 'console.anthropic.com')
+                                )
+                            ),
+
+                            // Upload Section
+                            e('div', { className: 'glass-card rounded-2xl shadow-xl p-8 mb-6' },
+                                e('div', { className: 'border-2 border-dashed border-blue-300 rounded-xl p-10 text-center hover:border-blue-400 transition-all duration-300 hover:bg-blue-50/30 file-hover' },
+                                    e('div', { className: 'bg-blue-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6' },
+                                        e(Upload, { className: 'h-12 w-12 text-blue-600' })
+                                    ),
+                                    e('h3', { className: 'text-2xl font-semibold text-gray-800 mb-3' }, 'Tải lên file PDF'),
+                                    e('p', { className: 'text-gray-600 mb-2' }, 'Hỗ trợ tải nhiều file cùng lúc từ nhiều khách hàng khác nhau'),
+                                    e('p', { className: 'text-sm text-gray-500 mb-6' }, 'Kích thước: tối đa 50MB/file • Tổng dung lượng: tối đa 1.5GB • Format: PDF'),
+                                    
+                                    e('input', {
+                                        ref: fileInputRef,
+                                        type: 'file',
+                                        multiple: true,
+                                        accept: '.pdf',
+                                        onChange: handleFileUpload,
+                                        className: 'hidden'
+                                    }),
+                                    
+                                    e('div', { className: 'flex flex-wrap gap-4 justify-center' },
+                                        e('button', {
+                                            onClick: () => fileInputRef.current?.click(),
+                                            disabled: isProcessing,
+                                            className: 'bg-blue-600 text-white px-10 py-4 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-3 text-lg font-medium shadow-lg'
+                                        },
+                                            e(Upload, { className: 'h-6 w-6' }),
+                                            'Chọn file PDF'
+                                        ),
+                                        
+                                        files.length > 0 && e('button', {
+                                            onClick: clearAll,
+                                            disabled: isProcessing,
+                                            className: 'bg-gray-600 text-white px-8 py-4 rounded-xl hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-3 text-lg font-medium shadow-lg'
+                                        },
+                                            e(Trash2, { className: 'h-6 w-6' }),
+                                            'Xóa tất cả'
+                                        ),
+
+                                        !showApiInput && apiKey && e('button', {
+                                            onClick: () => setShowApiInput(true),
+                                            className: 'bg-gray-500 text-white px-6 py-4 rounded-xl hover:bg-gray-600 transition-colors flex items-center gap-2'
+                                        },
+                                            e(Settings, { className: 'h-5 w-5' }),
+                                            'API Key'
+                                        )
+                                    )
+                                ),
+
+                                // Stats
+                                files.length > 0 && e('div', { className: 'mt-8 grid grid-cols-2 md:grid-cols-4 gap-4' },
+                                    e('div', { className: 'bg-blue-50 p-4 rounded-xl text-center' },
+                                        e('div', { className: 'text-3xl font-bold text-blue-600 mb-1' }, files.length),
+                                        e('div', { className: 'text-sm text-gray-600' }, 'File PDF')
+                                    ),
+                                    e('div', { className: 'bg-purple-50 p-4 rounded-xl text-center' },
+                                        e('div', { className: 'text-3xl font-bold text-purple-600 mb-1' }, totalSizeMB),
+                                        e('div', { className: 'text-sm text-gray-600' }, 'MB')
+                                    ),
+                                    e('div', { className: 'bg-green-50 p-4 rounded-xl text-center' },
+                                        e('div', { className: 'text-3xl font-bold text-green-600 mb-1' }, totalCustomers),
+                                        e('div', { className: 'text-sm text-gray-600' }, 'Khách hàng')
+                                    ),
+                                    e('div', { className: 'bg-yellow-50 p-4 rounded-xl text-center' },
+                                        e('div', { className: 'text-3xl font-bold text-yellow-600 mb-1' }, Math.round((totalSizeMB / 1536) * 100) + '%'),
+                                        e('div', { className: 'text-sm text-gray-600' }, 'Dung lượng')
+                                    )
+                                ),
+
+                                // File List
+                                files.length > 0 && !isProcessing && e('div', { className: 'mt-8' },
+                                    e('h4', { className: 'text-lg font-semibold text-gray-800 mb-4' }, `Danh sách file chờ xử lý (${files.length})`),
+                                    e('div', { className: 'grid gap-3 max-h-60 overflow-y-auto' },
+                                        files.slice(0, 10).map((file, index) =>
+                                            e('div', {
+                                                key: `${file.name}-${index}`,
+                                                className: 'flex items-center justify-between bg-gray-50 p-3 rounded-lg hover:bg-gray-100 transition-colors'
+                                            },
+                                                e('div', { className: 'flex items-center gap-3 flex-1 min-w-0' },
+                                                    e('div', { className: 'bg-red-100 p-2 rounded' },
+                                                        e(FileText, { className: 'h-4 w-4 text-red-600' })
+                                                    ),
+                                                    e('div', { className: 'flex-1 min-w-0' },
+                                                        e('p', { className: 'font-medium text-gray-800 truncate text-sm' }, file.name),
+                                                        e('p', { className: 'text-xs text-gray-500' }, Math.round(file.size / 1024) + ' KB')
+                                                    )
+                                                ),
+                                                e('button', {
+                                                    onClick: () => removeFile(index),
+                                                    className: 'text-red-500 hover:text-red-700 p-1',
+                                                    title: 'Xóa file'
+                                                },
+                                                    e(Trash2, { className: 'h-4 w-4' })
+                                                )
+                                            )
+                                        ),
+                                        files.length > 10 && e('div', { className: 'text-center text-gray-500 text-sm py-2' },
+                                            `... và ${files.length - 10} file khác`
+                                        )
+                                    )
+                                ),
+
+                                // Process Button
+                                e('div', { className: 'mt-8 text-center' },
+                                    e('button', {
+                                        onClick: processFiles,
+                                        disabled: files.length === 0 || isProcessing || !apiKey.trim(),
+                                        className: 'bg-gradient-to-r from-green-600 to-green-700 text-white px-16 py-6 rounded-2xl hover:from-green-700 hover:to-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center gap-4 mx-auto text-xl font-semibold shadow-2xl'
+                                    },
+                                        isProcessing ? [
+                                            e('div', { key: 'spinner', className: 'spinner' }),
+                                            'Đang phân tích...'
+                                        ] : [
+                                            e(BarChart3, { key: 'icon', className: 'h-8 w-8' }),
+                                            `Bắt đầu phân tích (${files.length} file)`
+                                        ]
+                                    ),
+                                    
+                                    !apiKey.trim() && e('p', { className: 'text-red-600 text-sm mt-3 font-medium' },
+                                        'Cần cung cấp Claude API key để sử dụng'
+                                    )
+                                )
+                            ),
+
+                            // Processing Progress
+                            isProcessing && e('div', { className: 'glass-card rounded-2xl shadow-xl p-6 mb-6' },
+                                e('div', { className: 'flex items-center gap-3 mb-4' },
+                                    e('div', { className: 'spinner' }),
+                                    e('h3', { className: 'text-xl font-semibold text-gray-800' }, 'Đang xử lý tài liệu')
+                                ),
+                                e('div', { className: 'space-y-4' },
+                                    e('div', { className: 'flex items-center justify-between text-sm text-gray-600' },
+                                        e('span', null, 'Tiến trình tổng thể'),
+                                        e('span', null, `${processingStats.processed}/${processingStats.total} file (${progress}%)`)
+                                    ),
+                                    e('div', { className: 'bg-gray-200 rounded-full h-4 overflow-hidden' },
+                                        e('div', { 
+                                            className: 'progress-bar h-full transition-all duration-500 ease-out',
+                                            style: { width: `${progress}%` }
+                                        })
+                                    ),
+                                    currentFile && e('div', { className: 'bg-blue-50 p-4 rounded-lg' },
+                                        e('p', { className: 'text-blue-800 font-medium' },
+                                            'Đang phân tích: ', 
+                                            e('span', { className: 'font-bold' }, currentFile)
+                                        ),
+                                        e('p', { className: 'text-blue-600 text-sm mt-1' },
+                                            `Ước tính thời gian còn lại: ~${Math.ceil((files.length - processingStats.processed) * 2)} phút`
+                                        )
+                                    )
+                                )
+                            ),
+
+                            // Results
+                            Object.keys(customers).length > 0 && e('div', { className: 'glass-card rounded-2xl shadow-xl' },
+                                e('div', { className: 'p-6 border-b border-gray-100' },
+                                    e('div', { className: 'flex items-center justify-between flex-wrap gap-4' },
+                                        e('div', { className: 'flex items-center gap-4' },
+                                            e('div', { className: 'bg-green-100 p-3 rounded-xl' },
+                                                e(Building2, { className: 'h-8 w-8 text-green-600' })
+                                            ),
+                                            e('div', null,
+                                                e('h3', { className: 'text-2xl font-bold text-gray-800' }, 'Kết quả phân loại theo khách hàng'),
+                                                e('p', { className: 'text-gray-600' }, 
+                                                    `${totalCustomers} khách hàng • ${totalSuccessFiles} file thành công • ${totalErrorFiles} file lỗi`
+                                                )
+                                            )
+                                        ),
+                                        e('button', {
+                                            onClick: exportToExcel,
+                                            className: 'bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 flex items-center gap-3 text-lg font-medium shadow-lg'
+                                        },
+                                            e(FileSpreadsheet, { className: 'h-6 w-6' }),
+                                            'Xuất Excel đa sheet'
+                                        )
+                                    )
+                                ),
+
+                                // Overall Statistics
+                                e('div', { className: 'p-6 border-b border-gray-100' },
+                                    e('div', { className: 'grid grid-cols-2 md:grid-cols-5 gap-4' },
+                                        e('div', { className: 'bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl text-center' },
+                                            e('div', { className: 'text-3xl font-bold text-blue-600 mb-1' }, totalFiles),
+                                            e('div', { className: 'text-sm text-gray-700' }, 'Tổng file')
+                                        ),
+                                        e('div', { className: 'bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl text-center' },
+                                            e('div', { className: 'text-3xl font-bold text-green-600 mb-1' }, totalSuccessFiles),
+                                            e('div', { className: 'text-sm text-gray-700' }, 'Thành công')
+                                        ),
+                                        e('div', { className: 'bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-xl text-center' },
+                                            e('div', { className: 'text-3xl font-bold text-red-600 mb-1' }, totalErrorFiles),
+                                            e('div', { className: 'text-sm text-gray-700' }, 'Lỗi')
+                                        ),
+                                        e('div', { className: 'bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-xl text-center' },
+                                            e('div', { className: 'text-3xl font-bold text-purple-600 mb-1' }, totalCustomers),
+                                            e('div', { className: 'text-sm text-gray-700' }, 'Khách hàng')
+                                        ),
+                                        e('div', { className: 'bg-gradient-to-br from-yellow-50 to-yellow-100 p-4 rounded-xl text-center' },
+                                            e('div', { className: 'text-3xl font-bold text-yellow-600 mb-1' }, totalSizeMB),
+                                            e('div', { className: 'text-sm text-gray-700' }, 'MB đã xử lý')
+                                        )
+                                    )
+                                ),
+
+                                // Customer Results
+                                e('div', { className: 'p-6' },
+                                    e('div', { className: 'space-y-4' },
+                                        Object.entries(customers).map(([customerName, customerData]) =>
+                                            e('div', {
+                                                key: customerName,
+                                                className: 'border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow duration-300'
+                                            },
+                                                e('div', {
+                                                    className: 'bg-gray-50 p-4 cursor-pointer hover:bg-gray-100 transition-colors',
+                                                    onClick: () => toggleDetails(customerName)
+                                                },
+                                                    e('div', { className: 'flex items-center justify-between' },
+                                                        e('div', { className: 'flex items-center gap-4' },
+                                                            e('div', { className: 'bg-blue-600 p-2 rounded-lg' },
+                                                                e(Building2, { className: 'h-5 w-5 text-white' })
+                                                            ),
+                                                            e('div', null,
+                                                                e('h4', { className: 'text-lg font-bold text-gray-800' }, customerName),
+                                                                e('div', { className: 'flex items-center gap-4 text-sm text-gray-600' },
+                                                                    e('span', null, 'MST: ' + (customerData.companyInfo.taxCode || customerData.companyInfo.id || 'N/A')),
+                                                                    e('span', null, '•'),
+                                                                    e('span', null, `${customerData.stats.totalFiles} tài liệu`),
+                                                                    e('span', null, '•'),
+                                                                    e('span', { 
+                                                                        className: customerData.stats.successFiles === customerData.stats.totalFiles 
+                                                                            ? 'text-green-600 font-medium' : 'text-yellow-600'
+                                                                    }, `${customerData.stats.successFiles}/${customerData.stats.totalFiles} thành công`)
+                                                                )
+                                                            )
+                                                        ),
+                                                        e('div', { className: 'flex items-center gap-3' },
+                                                            e('div', { className: 'text-right' },
+                                                                e('div', { className: 'text-lg font-bold text-gray-800' }, customerData.stats.avgConfidence + '%'),
+                                                                e('div', { className: 'text-xs text-gray-500' }, 'Độ tin cậy')
+                                                            ),
+                                                            e(Eye, { 
+                                                                className: `h-5 w-5 text-gray-400 transform transition-transform ${showDetails[customerName] ? 'rotate-180' : ''}`
+                                                            })
+                                                        )
+                                                    )
+                                                ),
+
+                                                showDetails[customerName] && e('div', { className: 'p-6 bg-white' },
+                                                    e('div', { className: 'grid md:grid-cols-2 gap-6 mb-6' },
+                                                        e('div', { className: 'bg-blue-50 p-4 rounded-lg' },
+                                                            e('h5', { className: 'font-semibold text-gray-800 mb-3' }, 'Thông tin công ty'),
+                                                            e('div', { className: 'space-y-2 text-sm' },
+                                                                e('div', null, e('strong', null, 'Tên: '), customerData.companyInfo.name),
+                                                                e('div', null, e('strong', null, 'Mã số thuế: '), customerData.companyInfo.taxCode || 'N/A'),
+                                                                e('div', null, e('strong', null, 'Người đại diện: '), customerData.companyInfo.representative || 'N/A'),
+                                                                e('div', null, e('strong', null, 'CCCD đại diện: '), customerData.companyInfo.representativeId || 'N/A'),
+                                                                e('div', null, e('strong', null, 'Địa chỉ: '), customerData.companyInfo.address || 'N/A'),
+                                                                e('div', null, e('strong', null, 'Liên hệ: '), 
+                                                                    (customerData.companyInfo.phone || '') + ' ' + (customerData.companyInfo.email || ''))
+                                                            )
+                                                        ),
+                                                        e('div', { className: 'bg-green-50 p-4 rounded-lg' },
+                                                            e('h5', { className: 'font-semibold text-gray-800 mb-3' }, 'Thống kê hồ sơ'),
+                                                            e('div', { className: 'grid grid-cols-2 gap-4' },
+                                                                e('div', { className: 'text-center' },
+                                                                    e('div', { className: 'text-2xl font-bold text-blue-600' }, customerData.stats.totalFiles),
+                                                                    e('div', { className: 'text-xs text-gray-600' }, 'Tổng file')
+                                                                ),
+                                                                e('div', { className: 'text-center' },
+                                                                    e('div', { className: 'text-2xl font-bold text-green-600' }, customerData.stats.successFiles),
+                                                                    e('div', { className: 'text-xs text-gray-600' }, 'Thành công')
+                                                                ),
+                                                                e('div', { className: 'text-center' },
+                                                                    e('div', { className: 'text-2xl font-bold text-red-600' }, customerData.stats.errorFiles),
+                                                                    e('div', { className: 'text-xs text-gray-600' }, 'Lỗi')
+                                                                ),
+                                                                e('div', { className: 'text-center' },
+                                                                    e('div', { className: 'text-2xl font-bold text-yellow-600' }, customerData.stats.avgConfidence + '%'),
+                                                                    e('div', { className: 'text-xs text-gray-600' }, 'Tin cậy')
+                                                                )
+                                                            )
+                                                        )
+                                                    ),
+
+                                                    e('div', { className: 'overflow-x-auto' },
+                                                        e('h5', { className: 'font-semibold text-gray-800 mb-3' }, `Danh mục tài liệu (${customerData.documents.length})`),
+                                                        e('div', { className: 'min-w-full' },
+                                                            e('div', { className: 'grid grid-cols-7 gap-2 bg-gray-50 p-3 text-sm font-semibold text-gray-700 border-b' },
+                                                                e('div', null, 'STT'),
+                                                                e('div', null, 'Tên tài liệu'),
+                                                                e('div', null, 'Loại'),
+                                                                e('div', null, 'Số/Mã'),
+                                                                e('div', null, 'Ngày'),
+                                                                e('div', null, 'Tin cậy'),
+                                                                e('div', null, 'Trạng thái')
+                                                            ),
+                                                            customerData.documents.map((doc, docIndex) =>
+                                                                e('div', {
+                                                                    key: docIndex,
+                                                                    className: 'grid grid-cols-7 gap-2 p-3 border-b hover:bg-gray-50 transition-colors text-sm'
+                                                                },
+                                                                    e('div', null, docIndex + 1),
+                                                                    e('div', null,
+                                                                        e('div', { className: 'font-medium text-gray-800 truncate', title: doc.document_title }, doc.document_title),
+                                                                        e('div', { className: 'text-xs text-gray-500' }, doc.fileName)
+                                                                    ),
+                                                                    e('div', null,
+                                                                        e('span', {
+                                                                            className: `px-2 py-1 rounded-full text-xs font-medium ${doc.document_category.includes('Lỗi') 
+                                                                                ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`
+                                                                        }, doc.document_category)
+                                                                    ),
+                                                                    e('div', { className: 'text-gray-600' }, doc.document_number || '-'),
+                                                                    e('div', { className: 'text-gray-600' }, doc.issue_date || '-'),
+                                                                    e('div', null,
+                                                                        e('span', {
+                                                                            className: `text-sm font-medium ${doc.confidence > 0.7 ? 'text-green-600' : 
+                                                                                doc.confidence > 0.4 ? 'text-yellow-600' : 'text-red-600'}`
+                                                                        }, Math.round(doc.confidence * 100) + '%')
+                                                                    ),
+                                                                    e('div', null,
+                                                                        e('div', { className: 'flex items-center gap-2' },
+                                                                            doc.status === 'success' ? 
+                                                                                e(CheckCircle, { className: 'h-4 w-4 text-green-500' }) :
+                                                                                e(AlertCircle, { className: 'h-4 w-4 text-red-500' }),
+                                                                            e('span', {
+                                                                                className: `text-xs font-medium ${doc.status === 'success' ? 'text-green-600' : 'text-red-600'}`
+                                                                            }, doc.status === 'success' ? 'OK' : 'Lỗi')
+                                                                        )
+                                                                    )
+                                                                )
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            ),
+
+                            // Footer
+                            e('div', { className: 'text-center mt-12 text-white/80' },
+                                e('div', { className: 'flex items-center justify-center gap-2 mb-2' },
+                                    e(FileText, { className: 'h-5 w-5' }),
+                                    e('span', { className: 'font-semibold' }, 'DocClassifier Pro')
+                                ),
+                                e('p', { className: 'text-sm' }, 'Được phát triển bởi AI Technology • Hỗ trợ: support@docclassifier.pro')
+                            )
+                        )
+                    );
+                }
+
+                // Initialize the app
+                const container = document.getElementById('root');
+                if (container && createRoot) {
+                    const root = createRoot(container);
+                    root.render(React.createElement(DocClassifierWeb));
+                    showApp();
+                } else {
+                    // Fallback for older React versions
+                    ReactDOM.render(React.createElement(DocClassifierWeb), container);
+                    showApp();
+                }
+
+            } catch (error) {
+                console.error('App initialization error:', error);
+                showError();
+            }
+        }
     </script>
 </body>
-
-</html> 
+</html>
